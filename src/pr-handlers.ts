@@ -27,7 +27,7 @@ export async function handleNewPullRequest({
   try {
     console.log("about to run agent");
     // Single agent call to analyze PR and create a proper review with line comments
-    await agent({
+    const response = await agent({
       input: `Review pull request #${pullNumber} in repo ${owner}/${repo}.
 
       Add comments to the issue/pr at the appriopriate places on anything that might need attention.
@@ -38,7 +38,7 @@ export async function handleNewPullRequest({
         token,
       },
     });
-
+    console.log("Response from agent:", response);
     console.log(`Review completed for PR #${pullNumber}`);
     return true;
   } catch (error) {
