@@ -1,11 +1,11 @@
 import { createAgent } from "spinai";
-import { openai } from "@ai-sdk/openai";
 import { analyzeCodeChanges } from "./actions/analyze-code-changes.js";
 import { createReviewComments } from "./actions/create-review-comments.js";
 import { getFileBeforeAfter } from "./actions/get-file-before-after.js";
 import { getPrFiles } from "./actions/get-pr-info.js";
 import { replyToComment } from "./actions/reply-to-comment.js";
 import { getCommentThread } from "./actions/get-comment-thread.js";
+import { openrouter } from "./utils/openrouter.js";
 
 // Unique marker for bot-generated comments
 export const BOT_COMMENT_MARKER = "🤖 ";
@@ -28,7 +28,7 @@ export async function getPRReviewAgent() {
       getPrFiles,
       getCommentThread,
     ],
-    model: openai("gpt-4o"),
+    model: openrouter("meta-llama/llama-3.3-70b-instruct:free"),
     spinApiKey: process.env.SPINAI_API_KEY,
     agentId: "github-pr-review-agent",
   });

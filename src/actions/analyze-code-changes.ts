@@ -2,6 +2,7 @@ import { createAction } from "spinai";
 import { openai } from "@ai-sdk/openai";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { openrouter } from "../utils/openrouter";
 
 const AnalysisResultSchema = z.object({
   line: z.number(),
@@ -88,7 +89,7 @@ For each significant issue found, provide:
 Remember: Only report real issues that need fixing. Quality over quantity. Only point out real issues, no nitpicking`;
 
     const { object } = await generateObject({
-      model: openai("gpt-4"),
+      model: openrouter("meta-llama/llama-3.3-70b-instruct:free"),
       prompt,
       schema: AnalysisResponseSchema,
     });
