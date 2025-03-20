@@ -1,4 +1,3 @@
-import { sign } from "jsonwebtoken"; 
 import axios from "axios";
 
 /**
@@ -19,8 +18,11 @@ export async function getTokenForWebhook(
     ? rawKey
     : `-----BEGIN RSA PRIVATE KEY-----\n${rawKey}\n-----END RSA PRIVATE KEY-----`;
 
+  // Dynamically import `jsonwebtoken` for ESM compatibility
+  const { default: jwt } = await import("jsonwebtoken"); 
+
   // Generate JWT for getting installation token
-  const jwtToken = sign(
+  const jwtToken = jwt.sign(
     {
       iat: Math.floor(Date.now() / 1000) - 60,
       exp: Math.floor(Date.now() / 1000) + 600,
