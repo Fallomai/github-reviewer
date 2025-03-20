@@ -16,7 +16,6 @@ dotenv.config();
  * Start the webhook server
  */
 export async function startServer() {
-  // Create Hono app
   const app = new Hono();
   const port = process.env.PORT || 3000;
 
@@ -26,7 +25,6 @@ export async function startServer() {
   // Webhook endpoint for GitHub events
   app.post("/webhook", async (c) => {
     try {
-      // Get the webhook payload and event type
       const payload = await c.req.json();
       const event = c.req.header("X-GitHub-Event");
 
@@ -36,9 +34,7 @@ export async function startServer() {
 
       console.log(`Received ${event} event`);
 
-      // Get installation token for this webhook
       const installationId = payload.installation?.id;
-
       if (!installationId) {
         return c.json({ error: "Missing installation ID in webhook" }, 400);
       }
@@ -46,14 +42,12 @@ export async function startServer() {
       const token = await getTokenForWebhook(installationId);
       const agent = await getPRReviewAgent();
 
-      // Handle different event types
       switch (event) {
         case "pull_request":
           if (payload.action === "opened" || payload.action === "synchronize") {
             await handleNewPullRequest({ payload, agent, token });
           }
           break;
-
         case "issue_comment":
           if (
             payload.action === "created" &&
@@ -62,7 +56,6 @@ export async function startServer() {
             await handleIssueComment({ payload, agent, token });
           }
           break;
-
         case "pull_request_review_comment":
           if (
             payload.action === "created" &&
@@ -80,22 +73,18 @@ export async function startServer() {
     }
   });
 
-  // Start the server
   serve(
     {
       fetch: app.fetch,
       port: Number(port),
     },
     (info) => {
-      console.log(
-        `PR Review Bot server running at http://localhost:${info.port}`
-      );
+      console.log(`PR Review Bot server running at http://localhost:${info.port}`);
     }
   );
 }
 
-// Start the server
-if (require.main === module) {
+if (process.argv[1]?.endsWith("webhook-server.js")) {
   startServer().catch((error) => {
     console.error("Failed to start server:", error);
     process.exit(1);

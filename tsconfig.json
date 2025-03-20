@@ -1,11 +1,13 @@
 {
   "compilerOptions": {
-    "target": "es2019",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "resolveJsonModule": true,
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "./dist",
     "esModuleInterop": true,
-    "skipLibCheck": false
+    "skipLibCheck": true,
+    "strict": true
   },
-  "exclude": ["templates", "dist"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }
