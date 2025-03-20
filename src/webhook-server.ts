@@ -34,39 +34,44 @@ export async function startServer() {
 
       console.log(`Received ${event} event`);
 
-      const installationId = payload.installation?.id;
-      if (!installationId) {
-        return c.json({ error: "Missing installation ID in webhook" }, 400);
-      }
+      // **Return response immediately to prevent timeout**
+      c.json({ status: "Accepted" });
 
-      const token = await getTokenForWebhook(installationId);
-      const agent = await getPRReviewAgent();
+      // **Process webhook asynchronously**
+      (async () => {
+        try {
+          const installationId = payload.installation?.id;
+          if (!installationId) {
+            console.error("Missing installation ID in webhook");
+            return;
+          }
 
-      switch (event) {
-        case "pull_request":
-          if (payload.action === "opened" || payload.action === "synchronize") {
-            await handleNewPullRequest({ payload, agent, token });
-          }
-          break;
-        case "issue_comment":
-          if (
-            payload.action === "created" &&
-            !payload.comment?.body?.startsWith("🤖 ")
-          ) {
-            await handleIssueComment({ payload, agent, token });
-          }
-          break;
-        case "pull_request_review_comment":
-          if (
-            payload.action === "created" &&
-            !payload.comment?.body?.startsWith("🤖 ")
-          ) {
-            await handleReviewComment({ payload, agent, token });
-          }
-          break;
-      }
+          const token = await getTokenForWebhook(installationId);
+          const agent = await getPRReviewAgent();
 
-      return c.json({ status: "success" });
+          switch (event) {
+            case "pull_request":
+              if (payload.action === "opened" || payload.action === "synchronize") {
+                await handleNewPullRequest({ payload, agent, token });
+              }
+              break;
+            case "issue_comment":
+              if (payload.action === "created" && !payload.comment?.body?.startsWith("🤖 ")) {
+                await handleIssueComment({ payload, agent, token });
+              }
+              break;
+            case "pull_request_review_comment":
+              if (payload.action === "created" && !payload.comment?.body?.startsWith("🤖 ")) {
+                await handleReviewComment({ payload, agent, token });
+              }
+              break;
+          }
+        } catch (error) {
+          console.error("Error processing webhook:", error);
+        }
+      })();
+
+      return; // **Prevents further blocking of request**
     } catch (error) {
       console.error("Error processing webhook:", error);
       return c.json({ error: "Internal server error" }, 500);
@@ -84,6 +89,7 @@ export async function startServer() {
   );
 }
 
+// Start the server only when executed directly
 if (process.argv[1]?.endsWith("webhook-server.js")) {
   startServer().catch((error) => {
     console.error("Failed to start server:", error);
