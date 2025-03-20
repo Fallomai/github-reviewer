@@ -1,9 +1,65 @@
-/**
- * PR and comment handling logic
- */
-import { CodeReviewSchema, CommentResponseSchema } from "./schemas.js";
-import { BOT_COMMENT_MARKER } from "./github-agent.js";
+import axios from "axios";
 import { Agent } from "spinai";
+import { CodeReviewSchema, CommentResponseSchema } from "./schemas.js";
+
+/**
+ * Post AI-generated review comments or a summary to a PR
+ */
+export async function postPRReview(
+  reviewData: any,
+  pull_request: any,
+  token: string
+) {
+  const { repository, number: prNumber } = pull_request;
+  const owner = repository.owner.login;
+  const repo = repository.name;
+
+  console.log(`📢 Posting review for PR #${prNumber} in ${owner}/${repo}...`);
+
+  try {
+    // Extract key points & review summary
+    const { status, review } = reviewData;
+
+    if (!review || !review.summary) {
+      console.warn(`⚠️ No review summary available. Posting default response.`);
+      await axios.post(
+        `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`,
+        {
+          body: "🤖 AI Review: No issues detected, PR looks good!",
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/vnd.github.v3+json",
+          },
+        }
+      );
+      return;
+    }
+
+    // Construct review message
+    let reviewComment = `🤖 **AI Review Summary:**\n\n${review.summary}\n\n`;
+
+    if (review.keyPoints?.length > 0) {
+      reviewComment += "**Key Points:**\n" + review.keyPoints.map((p) => `- ${p}`).join("\n");
+    }
+
+    await axios.post(
+      `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`,
+      { body: reviewComment },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      }
+    );
+
+    console.log("✅ PR review posted!");
+  } catch (error) {
+    console.error("❌ Error posting PR review:", error?.response?.data || error.message);
+  }
+}
 
 /**
  * Handle new pull request events
@@ -22,27 +78,24 @@ export async function handleNewPullRequest({
   const repo = repository.name;
   const pullNumber = pull_request.number;
 
-  console.log(`Reviewing PR #${pullNumber} in ${owner}/${repo}`);
+  console.log(`🔍 Reviewing PR #${pullNumber} in ${owner}/${repo}`);
 
   try {
-    console.log("about to run agent");
-    // Single agent call to analyze PR and create a proper review with line comments
-    await agent({
+    const response = await agent({
       input: `Review pull request #${pullNumber} in repo ${owner}/${repo}.
-
-      Add comments to the issue/pr at the appriopriate places on anything that might need attention.
-      
-      If no changes are required, make a general comment about the PR saying it all looks good
-      `,
-      state: {
-        token,
-      },
+      - Identify any issues and suggest improvements.
+      - Use JSON format for structured comments.
+      - If no issues found, return a positive summary.`,
+      responseFormat: CodeReviewSchema,
+      state: { token },
     });
 
-    console.log(`Review completed for PR #${pullNumber}`);
+    console.log("✅ AI Review Response:", JSON.stringify(response, null, 2));
+
+    await postPRReview(response, pull_request, token);
     return true;
   } catch (error) {
-    console.log(`Error reviewing PR #${pullNumber}:`, error);
+    console.error(`❌ Error reviewing PR #${pullNumber}:`, error);
     return false;
   }
 }
@@ -61,49 +114,54 @@ export async function handleIssueComment({
 }) {
   const { repository, issue, comment, sender } = payload;
 
-  // Only respond to comments on PRs, not regular issues
-  if (!issue.pull_request) {
-    return false;
-  }
-
-  console.log(sender.login, process.env.BOT_USERNAME);
-
-  // Check if we should respond to this comment
-  if (sender.login === process.env.BOT_USERNAME) {
-    return false;
-  }
+  if (!issue.pull_request) return false;
+  if (sender.login === process.env.BOT_USERNAME) return false;
 
   const owner = repository.owner.login;
   const repo = repository.name;
   const prNumber = issue.number;
 
-  console.log(`Responding to comment on PR #${prNumber}`);
+  console.log(`💬 Responding to PR comment from ${sender.login}`);
 
   try {
-    // Single agent call to generate and post the response
-    await agent({
-      input: `Respond to this comment on PR #${prNumber} in ${owner}/${repo}:
-              
+    const response = await agent({
+      input: `Respond to this PR comment:
+              PR #${prNumber} in ${owner}/${repo}
               Comment: ${comment.body}
-              Comment Author: ${comment.user.login}
-              
-              Generate a brief, helpful response that follows these rules.`,
+              Comment Author: ${comment.user.login}`,
       responseFormat: CommentResponseSchema,
-      state: {
-        token,
-      },
+      state: { token },
     });
 
-    console.log(`Response generated and posted to comment on PR #${prNumber}`);
+    const aiResponse = response?.response;
+    if (!aiResponse) {
+      console.error("❌ AI response is empty.");
+      return false;
+    }
+
+    console.log("✅ Generated AI Response:", aiResponse);
+
+    await axios.post(
+      `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`,
+      { body: `🤖 ${aiResponse}` },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      }
+    );
+
+    console.log(`✅ Response posted to PR comment!`);
     return true;
   } catch (error) {
-    console.log(`Error responding to comment on PR #${prNumber}:`, error);
+    console.error(`❌ Error responding to comment on PR #${prNumber}:`, error);
     return false;
   }
 }
 
 /**
- * Handle PR review comments (comments on specific lines)
+ * Handle PR review comments (inline review comments)
  */
 export async function handleReviewComment({
   payload,
@@ -116,11 +174,7 @@ export async function handleReviewComment({
 }) {
   const { repository, pull_request, comment, sender } = payload;
 
-  console.log(sender.login, process.env.BOT_USERNAME);
-  // Check if we should respond to this comment
-  if (sender.login === process.env.BOT_USERNAME) {
-    return false;
-  }
+  if (sender.login === process.env.BOT_USERNAME) return false;
 
   const owner = repository.owner.login;
   const repo = repository.name;
@@ -128,43 +182,47 @@ export async function handleReviewComment({
   const filePath = comment.path;
   const linePosition = comment.position || "N/A";
 
-  console.log(`Responding to review comment on file ${filePath}`);
+  console.log(`📝 Responding to review comment on ${filePath}`);
 
-  const input = `You are responding to a code review comment thread on PR #${prNumber} in ${owner}/${repo}.
-              This is a REVIEW COMMENT response, not a general PR comment.
+  const input = `You are responding to a **code review comment** on PR #${prNumber} in ${owner}/${repo}.
+              - **Original Comment**: ${comment.body}
+              - **Comment Author**: ${comment.user.login}
+              - **File**: ${filePath}
+              - **Line**: ${linePosition}
+              - **Diff Context**: ${comment.diff_hunk}
               
-              Original Comment: ${comment.body}
-              Comment Author: ${comment.user.login}
-              File: ${filePath}
-              Line: ${linePosition}
-              Diff Context: ${comment.diff_hunk}
-              
-              To respond in this thread, you MUST format your response as a review comment with these exact details:
-              prUrl: ${pull_request.html_url}
-              filename: ${filePath}
-              comments: [{
-                line: ${comment.line},
-                position: ${comment.position},
-                comment: "your response here",
-                inReplyTo: ${comment.id}
-              }]
-              
-              Generate a brief, technical response that follows these rules.`;
+              Respond with a **brief, professional review comment**.`;
 
   try {
-    // Single agent call to handle everything
-    await agent({
+    const response = await agent({
       input,
       responseFormat: CommentResponseSchema,
-      state: {
-        token,
-      },
+      state: { token },
     });
 
-    console.log(`Response generated and posted to review comment`);
+    const aiResponse = response?.response;
+    if (!aiResponse) {
+      console.error("❌ AI response is empty.");
+      return false;
+    }
+
+    console.log("✅ Generated AI Response:", aiResponse);
+
+    await axios.post(
+      `https://api.github.com/repos/${owner}/${repo}/pulls/comments/${comment.id}/replies`,
+      { body: `🤖 ${aiResponse}` },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      }
+    );
+
+    console.log(`✅ Response posted to review comment!`);
     return true;
   } catch (error) {
-    console.log(`Error responding to review comment:`, error);
+    console.error(`❌ Error responding to review comment:`, error);
     return false;
   }
 }
