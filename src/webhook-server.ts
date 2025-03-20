@@ -5,9 +5,9 @@ import {
   handleNewPullRequest,
   handleIssueComment,
   handleReviewComment,
-} from "./pr-handlers";
-import { getTokenForWebhook } from "./auth";
-import { getPRReviewAgent } from "./github-agent";
+} from "./pr-handlers.js";
+import { getTokenForWebhook } from "./auth.js";
+import { getPRReviewAgent } from "./github-agent.js";
 
 // Load environment variables
 dotenv.config();

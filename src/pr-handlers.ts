@@ -1,8 +1,8 @@
 /**
  * PR and comment handling logic
  */
-import { CodeReviewSchema, CommentResponseSchema } from "./schemas";
-import { BOT_COMMENT_MARKER } from "./github-agent";
+import { CodeReviewSchema, CommentResponseSchema } from "./schemas.js";
+import { BOT_COMMENT_MARKER } from "./github-agent.js";
 import { Agent } from "spinai";
 
 /**

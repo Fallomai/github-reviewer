@@ -1,5 +1,5 @@
 import * as dotenv from "dotenv";
-import { startServer } from "./webhook-server";
+import { startServer } from "./webhook-server.js";
 
 // Load environment variables
 dotenv.config();
