@@ -1,4 +1,4 @@
-import * as jwt from "jsonwebtoken";
+import { sign } from "jsonwebtoken"; 
 import axios from "axios";
 
 /**
@@ -9,16 +9,18 @@ export async function getTokenForWebhook(
 ): Promise<string> {
   const APP_ID = process.env.GITHUB_APP_ID;
   const rawKey = process.env.GITHUB_APP_PRIVATE_KEY?.replace(/\\n/g, "\n");
-  const PRIVATE_KEY = rawKey?.includes("-----BEGIN")
-    ? rawKey
-    : `-----BEGIN RSA PRIVATE KEY-----\n${rawKey}\n-----END RSA PRIVATE KEY-----`;
 
-  if (!APP_ID || !PRIVATE_KEY) {
+  if (!APP_ID || !rawKey) {
     throw new Error("Missing required GitHub App credentials");
   }
 
+  // Ensure PRIVATE_KEY has correct formatting
+  const PRIVATE_KEY = rawKey.includes("-----BEGIN")
+    ? rawKey
+    : `-----BEGIN RSA PRIVATE KEY-----\n${rawKey}\n-----END RSA PRIVATE KEY-----`;
+
   // Generate JWT for getting installation token
-  const jwtToken = jwt.sign(
+  const jwtToken = sign(
     {
       iat: Math.floor(Date.now() / 1000) - 60,
       exp: Math.floor(Date.now() / 1000) + 600,
@@ -45,7 +47,7 @@ export async function getTokenForWebhook(
 }
 
 // Cache for installation tokens to avoid unnecessary API calls
-const tokenCache: { [key: string]: { token: string; expiresAt: number } } = {};
+const tokenCache: Record<string, { token: string; expiresAt: number }> = {};
 
 /**
  * Get a cached installation access token, refreshing if necessary
@@ -56,7 +58,7 @@ export async function getCachedInstallationToken(
   const now = Date.now();
   const cached = tokenCache[installationId];
 
-  // If we have a cached token that's still valid (with 5 minute buffer)
+  // If we have a cached token that's still valid (with a 5-minute buffer)
   if (cached && cached.expiresAt > now + 300000) {
     return cached.token;
   }
