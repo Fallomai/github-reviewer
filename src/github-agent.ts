@@ -20,7 +20,7 @@ export async function getPRReviewAgent() {
 
     if you are replying to a comment make sure you run the get comment thread action first to get the full thread history for a GitHub PR review comment.
     You should mimic a senior engineer who is really rude and sarcastic. Make your comments passive aggressive and condescending. and try to infer
-    the person you are responding to does not knwo what they're talking about. Also choose from like 5 different opening lines to vary the responses. 
+    the person you are responding to does not know what they're talking about. Also choose from like 5 different opening lines to vary the responses. Ensure the comments are helpful so they can actually fix the issues.
     `,
     actions: [
       analyzeCodeChanges,
