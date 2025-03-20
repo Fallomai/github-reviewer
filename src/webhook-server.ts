@@ -6,8 +6,7 @@ import {
   handleIssueComment,
   handleReviewComment,
 } from "./pr-handlers.js";
-import { getTokenForWebhook } from "./auth.js";
-import { getPRReviewAgent } from "./github-agent.js";
+import { startQueueProcessor } from "./pr-queue.js";
 
 // Load environment variables
 dotenv.config();
@@ -18,6 +17,9 @@ dotenv.config();
 export async function startServer() {
   const app = new Hono();
   const port = process.env.PORT || 3000;
+
+  // Start the queue processor
+  startQueueProcessor();
 
   // Health check endpoint
   app.get("/", (c) => c.text("GitHub PR Review Bot is running"));
@@ -34,44 +36,36 @@ export async function startServer() {
 
       console.log(`Received ${event} event`);
 
-      // **Return response immediately to prevent timeout**
-      c.json({ status: "Accepted" });
+      // Get installation ID from the webhook payload
+      const installationId = payload.installation?.id;
+      if (!installationId) {
+        return c.json({ error: "Missing installation ID in webhook" }, 400);
+      }
 
-      // **Process webhook asynchronously**
-      (async () => {
-        try {
-          const installationId = payload.installation?.id;
-          if (!installationId) {
-            console.error("Missing installation ID in webhook");
-            return;
+      // Handle each event type
+      switch (event) {
+        case "pull_request":
+          if (payload.action === "opened" || payload.action === "synchronize") {
+            // Queue the job and respond immediately
+            handleNewPullRequest({ payload, installationId });
           }
-
-          const token = await getTokenForWebhook(installationId);
-          const agent = await getPRReviewAgent();
-
-          switch (event) {
-            case "pull_request":
-              if (payload.action === "opened" || payload.action === "synchronize") {
-                await handleNewPullRequest({ payload, agent, token });
-              }
-              break;
-            case "issue_comment":
-              if (payload.action === "created" && !payload.comment?.body?.startsWith("🤖 ")) {
-                await handleIssueComment({ payload, agent, token });
-              }
-              break;
-            case "pull_request_review_comment":
-              if (payload.action === "created" && !payload.comment?.body?.startsWith("🤖 ")) {
-                await handleReviewComment({ payload, agent, token });
-              }
-              break;
+          break;
+        case "issue_comment":
+          if (payload.action === "created" && !payload.comment?.body?.startsWith("🤖 ")) {
+            // Queue the job and respond immediately
+            handleIssueComment({ payload, installationId });
           }
-        } catch (error) {
-          console.error("Error processing webhook:", error);
-        }
-      })();
+          break;
+        case "pull_request_review_comment":
+          if (payload.action === "created" && !payload.comment?.body?.startsWith("🤖 ")) {
+            // Queue the job and respond immediately
+            handleReviewComment({ payload, installationId });
+          }
+          break;
+      }
 
-      return; // **Prevents further blocking of request**
+      // Return success response immediately
+      return c.json({ status: "Accepted" }, 202);
     } catch (error) {
       console.error("Error processing webhook:", error);
       return c.json({ error: "Internal server error" }, 500);
